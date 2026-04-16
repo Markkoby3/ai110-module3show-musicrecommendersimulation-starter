@@ -17,17 +17,68 @@ Replace this paragraph with your own summary of what your version does.
 
 ## How The System Works
 
-Explain your design in plain language.
+This recommender builds a profile of what a user enjoys — their preferred genre, mood, energy level, and valence — and then scores every song in the catalog against that profile one at a time.
 
-Some prompts to answer:
+**Data flow:**
 
-- What features does each `Song` use in your system
-  - For example: genre, mood, energy, tempo
-- What information does your `UserProfile` store
-- How does your `Recommender` compute a score for each song
-- How do you choose which songs to recommend
+```mermaid
+flowchart TD
+    A([User Preferences\ngenre · mood · energy · valence]) --> B[Load songs.csv]
+    B --> C{For each song in catalog}
+    C --> D[Compute match score]
+    D --> E{Genre match?}
+    E -- Yes +2.0 --> F[Add genre points]
+    E -- No --> F
+    F --> G{Mood match?}
+    G -- Yes +1.0 --> H[Add mood points]
+    G -- No --> H
+    H --> I[Energy proximity\n+0 to 2.0 points]
+    I --> J[Valence proximity\n+0 to 1.0 points]
+    J --> K[Song score ready]
+    K --> C
+    C --> L[Sort all songs by score]
+    L --> M([Top K Recommendations\nwith explanations])
+```
 
-You can include a simple diagram or bullet list if helpful.
+**Algorithm Recipe (finalized):**
+
+| Signal | Points | How it's calculated |
+|---|---|---|
+| Genre match | **+2.0** | Exact string match between song genre and user's favorite genre |
+| Mood match | **+1.0** | Exact string match between song mood and user's favorite mood |
+| Energy proximity | **0 – 2.0** | `(1 - abs(song_energy - target_energy)) × 2.0` |
+| Valence proximity | **0 – 1.0** | `(1 - abs(song_valence - target_valence)) × 1.0` |
+| **Max possible score** | **6.0** | |
+
+Once every song has a score the system sorts them highest to lowest and returns the top `k` with a plain-English explanation (e.g., *"Recommended because it matches your favorite genre (lofi) and energy is very close to your target (0.38)"*).
+
+**Expected biases:**
+
+- **Genre dominance** — a +2.0 flat bonus means any song in the right genre jumps ahead of almost everything else, even if the energy and mood are a poor fit. A great jazz track that perfectly matches the user's energy will lose to a mediocre lofi track just because of the genre label.
+- **Cold-start narrowness** — the profile has only four fields. Users who like varied moods (e.g., chill *and* focused depending on the time of day) will get repetitive results because the system always optimizes for one target mood.
+- **Catalog coverage blind spot** — with only 20 songs, entire genres (e.g., hip-hop, reggae) are missing, so users whose taste falls outside the catalog will always get poor matches.
+
+**Song features used:**
+
+| Feature | Type | Role in scoring |
+|---|---|---|
+| `energy` | float 0–1 | Primary signal — how intense/active the song feels |
+| `valence` | float 0–1 | Primary signal — how happy vs. sad the song sounds |
+| `genre` | string | Categorical bonus (+2.0 flat) |
+| `mood` | string | Categorical bonus (+1.0 flat) |
+| `acousticness` | float 0–1 | Used in OOP `Recommender` class only |
+| `danceability` | float 0–1 | Present in dataset; not yet weighted |
+| `tempo_bpm` | int | Present in dataset; not yet weighted |
+
+**UserProfile fields used:**
+
+| Field | Type | How it's used |
+|---|---|---|
+| `target_energy` | float 0–1 | Compared against each song's energy |
+| `favorite_genre` | string | Triggers +2.0 genre bonus |
+| `favorite_mood` | string | Triggers +1.0 mood bonus |
+| `likes_acoustic` | bool | Boosts acousticness in OOP path |
+| `valence` (dict only) | float 0–1 | Compared against song valence |
 
 ---
 
